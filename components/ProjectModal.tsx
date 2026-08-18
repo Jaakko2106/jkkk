@@ -2,7 +2,39 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Project } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
 import EditableImage from './EditableImage';
+import { 
+    Code2, Palette, FileJson, Layout, Database, Terminal, FileCode2, FileImage, 
+    MonitorSmartphone, Hexagon, PenTool, Layers
+} from 'lucide-react';
+
+const getToolInfo = (toolName: string) => {
+    const name = toolName.toLowerCase();
+    
+    const infoMap: Record<string, { desc: string; icon: any }> = {
+        'html': { desc: 'Markup language for structure.', icon: FileCode2 },
+        'css': { desc: 'Style sheet language for presentation.', icon: Layout },
+        'javascript': { desc: 'Dynamic programming language.', icon: FileJson },
+        'react': { desc: 'Library for building user interfaces.', icon: Hexagon },
+        'tailwind': { desc: 'Utility-first CSS framework.', icon: Palette },
+        'tailwind css': { desc: 'Utility-first CSS framework.', icon: Palette },
+        'typescript': { desc: 'Typed superset of JavaScript.', icon: Code2 },
+        'vite': { desc: 'Next generation frontend tooling.', icon: Terminal },
+        'figma': { desc: 'Collaborative interface design tool.', icon: Palette },
+        'node.js': { desc: 'JavaScript runtime environment.', icon: Database },
+        'photoshop': { desc: 'Raster graphics editor.', icon: FileImage },
+        'adobe photoshop': { desc: 'Raster graphics editor.', icon: FileImage },
+        'illustrator': { desc: 'Vector graphics editor.', icon: PenTool },
+        'adobe illustrator': { desc: 'Vector graphics editor.', icon: PenTool },
+        'indesign': { desc: 'Desktop publishing software.', icon: Layers },
+        'adobe indesign': { desc: 'Desktop publishing software.', icon: Layers },
+        'web design': { desc: 'Responsive and aesthetic design.', icon: MonitorSmartphone },
+        'ui/ux': { desc: 'User interface & experience design.', icon: Layout },
+    };
+
+    return infoMap[name] || { desc: 'Technology or skill used.', icon: Code2 };
+};
 
 interface ProjectModalProps {
     isOpen: boolean;
@@ -189,8 +221,12 @@ const FullscreenImage: React.FC<{ src: string; alt: string }> = ({ src, alt }) =
     );
 };
 
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../src/firebase';
+
 const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, project }) => {
     const { t } = useLanguage();
+    const { isAdmin } = useAuth();
     const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
     const [isVisible, setIsVisible] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
@@ -239,12 +275,18 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, project })
         });
     }, [project, isEditMode]);
 
-    const handleSaveEdits = () => {
+    const handleSaveEdits = async () => {
         const newData = {
             ...editedProject,
             tools: editedProject.tools.split(',').map(t => t.trim()).filter(Boolean)
         };
-        localStorage.setItem(`project-data-${project.id}`, JSON.stringify(newData));
+        const dataStr = JSON.stringify(newData);
+        localStorage.setItem(`project-data-${project.id}`, dataStr);
+        try {
+            await setDoc(doc(db, 'site_data', `project-data-${project.id}`), { value: dataStr });
+        } catch(e) {
+            console.error("Failed to save to firestore", e);
+        }
         window.dispatchEvent(new Event('project-updated'));
         setIsEditMode(false);
     };
@@ -442,14 +484,16 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, project })
                         <h3 id="project-details-title" className="text-2xl font-bold text-indigo-700 dark:text-indigo-400">{project.title}</h3>
                     )}
                     <div className="relative group/share flex items-center gap-2">
-                        <button
-                            onClick={() => setIsEditMode(!isEditMode)}
-                            className={`p-2 rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 ${isEditMode ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300' : 'hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300'}`}
-                            aria-label="Toggle Edit Mode"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-                        </button>
-                        {isEditMode && (
+                        {isAdmin && (
+                            <button
+                                onClick={() => setIsEditMode(!isEditMode)}
+                                className={`p-2 rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 ${isEditMode ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300' : 'hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300'}`}
+                                aria-label="Toggle Edit Mode"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                            </button>
+                        )}
+                        {isEditMode && isAdmin && (
                             <button
                                 onClick={handleSaveEdits}
                                 className="p-2 rounded-full hover:bg-green-50 dark:hover:bg-green-900/30 text-green-500 hover:text-green-600 dark:hover:text-green-400 transition-all focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -623,11 +667,22 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, project })
                                     />
                                 ) : (
                                     <div className="flex flex-wrap gap-2">
-                                        {project.tools?.map(tool => (
-                                            <span key={tool} className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-md border border-indigo-100 dark:border-indigo-800/50">
-                                                {tool}
-                                            </span>
-                                        ))}
+                                        {project.tools?.map(tool => {
+                                            const info = getToolInfo(tool);
+                                            const Icon = info.icon;
+                                            return (
+                                                <div key={tool} className="group/tooltip relative inline-flex">
+                                                    <span className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-md border border-indigo-100 dark:border-indigo-800/50 cursor-help flex items-center gap-1.5 transition-colors group-hover/tooltip:bg-indigo-100 dark:group-hover/tooltip:bg-indigo-900/50">
+                                                        <Icon className="w-3.5 h-3.5 opacity-80" />
+                                                        {tool}
+                                                    </span>
+                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-[200px] bg-gray-900 dark:bg-black text-white text-xs rounded-md py-1.5 px-2.5 opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all duration-200 z-10 shadow-lg pointer-events-none text-center leading-relaxed transform group-hover/tooltip:-translate-y-1">
+                                                        {info.desc}
+                                                        <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-[1px] border-4 border-transparent border-t-gray-900 dark:border-t-black"></div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>

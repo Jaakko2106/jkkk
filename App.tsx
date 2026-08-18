@@ -13,6 +13,7 @@ import ProjectModal from './components/ProjectModal';
 import ScrollToTopButton from './components/ScrollToTopButton';
 import { Project } from './types';
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
+import { AuthProvider } from './contexts/AuthContext';
 
 const getProjectsData = (lang: 'en' | 'fi'): Project[] => {
     const isFi = lang === 'fi';
@@ -124,6 +125,9 @@ const getProjectsData = (lang: 'en' | 'fi'): Project[] => {
     return baseProjects;
 }
 
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from './src/firebase';
+
 const AppContent: React.FC = () => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -141,6 +145,26 @@ const AppContent: React.FC = () => {
     // State to hold projects to ensure they update on storage events
     const [projectsData, setProjectsData] = useState<Project[]>([]);
     const [refreshKey, setRefreshKey] = useState(0);
+
+    // Sync all site_data from Firestore to localStorage
+    useEffect(() => {
+        const unsubscribe = onSnapshot(collection(db, 'site_data'), (snapshot) => {
+            let changed = false;
+            snapshot.forEach((doc) => {
+                const key = doc.id;
+                const value = doc.data().value;
+                if (localStorage.getItem(key) !== value) {
+                    localStorage.setItem(key, value);
+                    changed = true;
+                }
+            });
+            if (changed) {
+                setRefreshKey(prev => prev + 1);
+                window.dispatchEvent(new CustomEvent('image-updated'));
+            }
+        });
+        return () => unsubscribe();
+    }, []);
 
     // Fetch projects when language changes or refresh triggered
     useEffect(() => {
@@ -285,9 +309,11 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => {
     return (
-        <LanguageProvider>
-            <AppContent />
-        </LanguageProvider>
+        <AuthProvider>
+            <LanguageProvider>
+                <AppContent />
+            </LanguageProvider>
+        </AuthProvider>
     );
 };
 

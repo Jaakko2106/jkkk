@@ -1,5 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { useSiteData } from '../src/hooks/useSiteData';
 
 interface EditableImageProps {
     storageKey: string;
@@ -20,17 +22,9 @@ const EditableImage: React.FC<EditableImageProps> = ({
     onLoad,
     clickToUpload = false
 }) => {
-    const [src, setSrc] = useState(defaultSrc);
     const fileInputRef = useRef<HTMLInputElement>(null);
-
-    useEffect(() => {
-        const saved = localStorage.getItem(storageKey);
-        if (saved) {
-            setSrc(saved);
-        } else {
-            setSrc(defaultSrc);
-        }
-    }, [storageKey, defaultSrc]);
+    const { isAdmin } = useAuth();
+    const [src, setSrc] = useSiteData(storageKey, defaultSrc);
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -39,12 +33,11 @@ const EditableImage: React.FC<EditableImageProps> = ({
             try {
                 const compressedDataUrl = await compressImage(file, 1200, 1200, 0.7);
                 try {
-                    localStorage.setItem(storageKey, compressedDataUrl);
-                    setSrc(compressedDataUrl);
+                    await setSrc(compressedDataUrl);
                     window.dispatchEvent(new CustomEvent('image-updated'));
                 } catch (error) {
                     console.error("Storage failed", error);
-                    alert("Failed to save image. Local storage might be full. Try a smaller image.");
+                    alert("Failed to save image. Try a smaller image.");
                 }
             } catch (error) {
                 console.error("Image compression failed", error);
@@ -93,14 +86,15 @@ const EditableImage: React.FC<EditableImageProps> = ({
     };
 
     const triggerUpload = (e: React.MouseEvent) => {
+        if (!isAdmin) return;
         e.stopPropagation();
         fileInputRef.current?.click();
     };
 
     return (
         <div 
-            className={`relative group/edit ${wrapperClassName || ''} ${clickToUpload ? 'cursor-pointer' : ''}`}
-            onClick={clickToUpload ? triggerUpload : undefined}
+            className={`relative ${isAdmin ? 'group/edit' : ''} ${wrapperClassName || ''} ${clickToUpload && isAdmin ? 'cursor-pointer' : ''}`}
+            onClick={clickToUpload && isAdmin ? triggerUpload : undefined}
         >
             <img 
                 src={src} 
@@ -109,31 +103,35 @@ const EditableImage: React.FC<EditableImageProps> = ({
                 onLoad={onLoad} 
             />
             
-            <div 
-                onClick={!clickToUpload ? triggerUpload : (e) => e.stopPropagation()}
-                className={`absolute top-2 right-2 p-2 bg-black/60 hover:bg-black/80 rounded-full text-white cursor-pointer transition-opacity z-30 backdrop-blur-sm shadow-md ${clickToUpload ? 'opacity-40 group-hover/edit:opacity-100' : 'opacity-0 group-hover/edit:opacity-100'}`}
-                title="Change Image"
-                role="button"
-                aria-label="Change image"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-                </svg>
-            </div>
+            {isAdmin && (
+                <div 
+                    onClick={!clickToUpload ? triggerUpload : (e) => e.stopPropagation()}
+                    className={`absolute top-2 right-2 p-2 bg-black/60 hover:bg-black/80 rounded-full text-white cursor-pointer transition-opacity z-30 backdrop-blur-sm shadow-md ${clickToUpload ? 'opacity-40 group-hover/edit:opacity-100' : 'opacity-0 group-hover/edit:opacity-100'}`}
+                    title="Change Image"
+                    role="button"
+                    aria-label="Change image"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+                    </svg>
+                </div>
+            )}
             
-            {clickToUpload && (
+            {clickToUpload && isAdmin && (
                 <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/edit:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                     <span className="bg-black/40 text-white text-[10px] px-2 py-1 rounded-md backdrop-blur-sm">Click to change</span>
                 </div>
             )}
 
-            <input 
-                type="file" 
-                ref={fileInputRef}
-                className="hidden"
-                accept="image/*"
-                onChange={handleFileChange}
-            />
+            {isAdmin && (
+                <input 
+                    type="file" 
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                />
+            )}
         </div>
     );
 };
